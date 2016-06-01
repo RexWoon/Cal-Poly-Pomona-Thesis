@@ -1,0 +1,210 @@
+# This file contains the code that generated each runtime for methods that use the functions in the standard install of R (no packages).
+
+
+# parameters of design matrices
+
+n <- 2^seq(0,10)*1000
+k <- floor(8*sqrt(2)^seq(0,12))
+totalrep <- seq(1,100)
+
+
+#----------------- creation of matrix to store values------------------------------------------------------
+makemat <- function(n,k,totalrep){
+  mat <- matrix(NA,length(n)*length(k)*length(totalrep),4)
+  
+  # cycles through and creates 1st column 11/7: should have created the entire first column
+  z <- 1 
+  y <- length(k)*length(totalrep)
+  for(g in 1:length(n)){
+    for(i in z:y){
+      mat[i,1] <- n[g]
+    }
+    z <- y + 1
+    y <- y + length(k)*length(totalrep)
+  }
+  
+  # cycles through and creates 2nd and 3rd columns 11/6: creates for the first 3000 rows
+  a <- 1
+  b <- 100
+  for(c in 1:length(n)){ # added 11/7 creates all the rows
+    for (f in 1:length(k)){ # spans all the k-values 
+      for (j in a:b) { 
+        mat[j,2] <- k[f]# k value
+        mat[j,3] <- (j %% 100) # replication number modulo 100
+      }
+      if (mat[j,3]==0) {mat[j,3] <- 100} # modulous converts what would be 100 to 0, this line corrects the value to the proper index
+      a <- b+1 
+      b <- b+100
+    }
+  }
+  colnames(mat) <- c("n","k","replicate","runtime")
+  return(mat)
+}
+
+
+#--------------------- design matrices ----------------------------------
+
+# matrix version used for native methods
+makeregmat <- function(n,k){
+  x <- matrix(0,n,k)
+  x[,1] <- 1
+  for (l in 2:k) {
+    x[,l] <- rnorm(n)
+    gc()
+  }
+  return(x)
+}
+
+# dataframe version used for packages
+makeregdf <- function(n,k){
+  library(foreach)
+  df <- data.frame(rnorm(n))
+  colnames(df) <- "y"
+  clmnam <- paste("x",seq(2,(k)),sep = "")
+  foreach(o=1:(k-1)) %do% {
+    df[,clmnam[o]] <- rnorm(n)
+    gc()
+  }
+  return(df)
+}
+
+# ----------------- lm method ----------------------------------------
+
+# start index for matrix that stores runtimes
+f <- 1
+l <- 100
+
+lm_runtimes <- makemat(n,k,totalrep = totalrep)
+
+
+for(i in 1:length(n)){
+  for( j in 1:length(k)){
+    for( m in f:l){
+      X <- makeregmat(n[i],k[j])
+      Y <- X%*%(seq(1,k[j]))+rnorm(n[i])
+      lm_runtimes[m,4] <- as.numeric(system.time(lm(Y~X))[3])
+      rm(X,Y)
+      gc()
+    }
+    cat(paste("For n=",n[i],"k=",k[j],"average runtime of lm is ",mean(lm_runtimes[f:l,4]),"\n")) # check if average runtimes makes sense
+    f <- l+1
+    l <- l+100
+  }
+}
+
+# could not allocate vector of size 2.0 GB for n=512000, k=512
+
+# n=1024000
+f <- 13001
+l <- 13100
+
+for(j in 1:length(k)){
+  for( m in f:l){
+    X <- makeregmat(1024000,k[j])
+    Y <- X%*%(seq(1,k[j]))+rnorm(1024000)
+    lm_runtimes[m,4] <- as.numeric(system.time(lm(Y~X))[3])
+    rm(X,Y)
+    gc()
+  }
+  cat(paste("For n=",n3[i],"k=",k[j],"average runtime of lm is ",mean(lm_runtimes[f:l,4]),"\n"))
+  cat(paste("Finished at",Sys.time(),"\n"))
+  f <- l+1
+  l <- l+100
+}
+
+write.csv(MRO_lm_runtimes,"MRO_lm_runtimes.csv")
+
+
+# ----------------- lsfit method ----------------------------------------
+
+# start index for matrix that stores runtimes
+f <- 1
+l <- 100
+
+lsfit_runtimes <- makemat(n,k,totalrep = totalrep)
+
+
+for(i in 1:length(n)){
+  for( j in 1:length(k)){
+    for( m in f:l){
+      X <- makeregmat(n[i],k[j])
+      Y <- X%*%(seq(1,k[j]))+rnorm(n[i])
+      lsfit_runtimes[m,4] <- as.numeric(system.time(lsfit(X,Y,intercept = FALSE))[3]))
+      rm(X,Y)
+      gc()
+    }
+    cat(paste("For n=",n1[i],"k=",k[j],"average runtime of lsfit is ",mean(lsfit_runtimes[f:l,4]),"\n"))
+    f <- l+1
+    l <- l+100
+  }
+}
+
+# Same cutoff as with lm method
+f <- 13001
+l <- 13100
+
+
+for( j in 1:length(k)){
+  for( m in f:l){
+    X <- makeregmat(1024000,k[j])
+    Y <- X%*%(seq(1,k[j]))+rnorm(1024000)
+    MRO_lsfit_runtimes[m,4] <- as.numeric(system.time(lsfit(X,Y,intercept = FALSE))[3])
+    rm(X,Y)
+    gc()
+  }
+  cat(paste("For n=",1024000,"k=",k[j],"average runtime of lsfit with MRO is ",mean(MRO_lsfit_runtimes[f:l,4]),"\n"))
+  cat(paste("Finished at",Sys.time(),"\n"))
+  f <- l+1
+  l <- l+100
+}
+
+
+#-------------------------------- Naive ------------------------------------------------------------------------
+
+
+naive_runtimes <- makemat(n,k,totalrep = totalrep)
+
+f <- 1
+l <- 100
+
+for(i in 1:length(n)){
+  for( j in 1:length(k)){
+    for( m in f:l){
+      X <- makeregmat(n[i],k[j])
+      Y <- X%*%(seq(1,k[j]))+rnorm(n[i])
+      naive_runtimes[m,4] <- as.numeric(system.time(solve(t(X)%*%X)%*%t(X)%*%Y)[3])
+      rm(X,Y)
+      gc()
+    }
+    cat(paste("For n=",n[i],"k=",k[j],"average runtime of naive is ",mean(naive_runtimes[f:l,4]),"\n"))
+    cat(paste("Finished at",Sys.time(),"\n"))
+    f <- l+1
+    l <- l+100
+  }
+}
+
+#-------------------------------- crossprod ------------------------------------------------------------------------
+
+
+crossprod_runtimes <- makemat(n,k,totalrep = totalrep)
+
+f <- 1
+l <- 100
+
+for(i in 1:length(n)){
+  for( j in 1:length(k)){
+    for( m in f:l){
+      X <- makeregmat(n[i],k[j])
+      Y <- X%*%(seq(1,k[j]))+rnorm(n[i])
+      crossprod_runtimes[m,4] <- as.numeric(system.time(solve(crossprod(X))%*%crossprod(X,Y))[3])
+      rm(X,Y)
+      gc()
+    }
+    cat(paste("For n=",n[i],"k=",k[j],"average runtime of crossprod is ",mean(crossprod_runtimes[f:l,4]),"\n"))
+    cat(paste("Finished at",Sys.time(),"\n"))
+    f <- l+1
+    l <- l+100
+  }
+}
+
+

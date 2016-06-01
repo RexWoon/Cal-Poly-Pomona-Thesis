@@ -1,0 +1,118 @@
+# A file containg the codes that generate the runtimes for methods that used the packages, biglm, ff and bigmemory.
+
+n <- 2^seq(0,10)*1000
+# subset of column numbers for design matrix. A subset was chosen to save time.
+big_k <- c(8,128,512)
+
+totalrep <- seq(1,100)
+
+
+#----------------- creation of matrix to store values------------------------------------------------------
+makemat <- function(n,k,totalrep){
+  mat <- matrix(NA,length(n)*length(k)*length(totalrep),4)
+  
+  # cycles through and creates 1st column 11/7: should have created the entire first column
+  z <- 1 
+  y <- length(k)*length(totalrep)
+  for(g in 1:length(n)){
+    for(i in z:y){
+      mat[i,1] <- n[g]
+    }
+    z <- y + 1
+    y <- y + length(k)*length(totalrep)
+  }
+  
+  # cycles through and creates 2nd and 3rd columns 11/6: creates for the first 3000 rows
+  a <- 1
+  b <- 100
+  for(c in 1:length(n)){ # added 11/7 creates all the rows
+    for (f in 1:length(k)){ # spans all the k-values 
+      for (j in a:b) { 
+        mat[j,2] <- k[f]# k value
+        mat[j,3] <- (j %% 100) # replication number modulo 100
+      }
+      if (mat[j,3]==0) {mat[j,3] <- 100} # modulous converts what would be 100 to 0, this line corrects the value to the proper index
+      a <- b+1 
+      b <- b+100
+    }
+  }
+  colnames(mat) <- c("n","k","replicate","runtime")
+  return(mat)
+}
+
+#--------------------- design matrices ----------------------------------
+
+# dataframe version used for packages
+makeregdf <- function(n,k){
+  library(foreach)
+  df <- data.frame(rnorm(n))
+  colnames(df) <- "y"
+  clmnam <- paste("x",seq(2,(k)),sep = "")
+  foreach(o=1:(k-1)) %do% {
+    df[,clmnam[o]] <- rnorm(n)
+    gc()
+  }
+  return(df)
+}
+
+#-------------------------------------------------bigmemory-------------------------------------------------
+library(biglm)
+library(bigmemory)
+library(biganalytics)
+
+bigmemory_runtimes_elasped <- makemat(n,big_k,1:100)
+bigmemory_runtimes_user <- makemat(n,big_k,1:100)
+
+f <- 1
+l <- length(totalrep)
+
+for (i in 1:length(n)){
+  for (j in 1:length(big_k)){
+    clmnam <- c("y",paste("x",seq(2,(big_k[j])),sep = "")) # column names for bigmatrix
+    fmla <- as.formula(paste("y ~",paste(clmnam[-1],collapse = "+"))) # formula for fixed k
+    for (m in f:l){
+      mybigmatrix <- as.big.matrix(makeregdf(n[i],big_k[j])) # without backing/descriptor file
+      runtime <- system.time(biglm.big.matrix(fmla,data = mybigmatrix))
+      bigmemory_runtimes_elasped[m,4] <- as.numeric(runtime[3])
+      bigmemory_runtimes_user[m,4] <- as.numeric(runtime[1])
+      rm(mybigmatrix,runtime)
+      
+    }
+    cat(paste("For n=",n[i],"k=",big_k[j],"average elasped runtime of bigmemory:",mean(bigmemory_runtimes_elasped[f:l,4]),"average user runtime:",mean(bigmemory_runtimes_user[f:l,4]),"\n"))
+    cat(paste("time: ",Sys.time(),"\n"))
+    f <- l+1
+    l <- l+100
+  }
+}
+
+
+# ----------------------------------- ff ---------------------------------------------------
+library(ff); library(ffbase); library(biglm)
+
+ff_runtimes_elasped <- makemat(n,big_k,1:100)
+ff_runtimes_user <- makemat(n,big_k,1:100)
+
+f <- 1
+l <- length(totalrep)
+
+for (i in 1:length(n)){
+  for (j in 1:length(big_k)){
+    clmnam <- c("y",paste("x",seq(2,(big_k[j])),sep = "")) # column names for bigmatrix
+    fmla <- as.formula(paste("y ~",paste(clmnam[-1],collapse = "+"))) # formula for fixed k
+    for (m in f:l){
+      my.ffdf <- as.ffdf.data.frame(makeregdf(n[i],big_k[j]))
+      runtime <- system.time(bigglm(fmla,data = my.ffdf))
+      ff_runtimes_elasped[m,4] <- as.numeric(runtime[3])
+      ff_runtimes_user[m,4] <- as.numeric(runtime[1])
+      rm(my.ffdf,runtime)
+      gc()
+    }
+    cat(paste("For n=",n[i],"k=",big_k[j],"average elasped runtime of ff:",mean(ff_runtimes_elasped[f:l,4]),"average user runtime:",mean(ff_runtimes_user[f:l,4]),"\n"))
+    cat(paste("time: ",Sys.time(),"\n"))
+    f <- l+1
+    l <- l+100
+  }
+}
+
+
+
